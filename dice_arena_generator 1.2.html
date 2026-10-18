@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dice Arena — генератор персонажей</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#1b1713;--panel:#25201a;--line:#43392c;--ink:#efe6d4;--mute:#a39880;--acc:#c8963e;--acc2:#7a5a1f}
+@media (prefers-color-scheme: light){:root{--bg:#ece4d2;--panel:#f6f0e2;--line:#cdbf9f;--ink:#2a2118;--mute:#6f6350;--acc:#8a5a12;--acc2:#c8963e}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 Georgia,"Times New Roman",serif}
+.app{display:grid;grid-template-columns:420px 1fr;min-height:100vh}
+#form{background:var(--panel);border-right:1px solid var(--line);padding:16px 18px;overflow-y:auto;max-height:100vh;position:sticky;top:0}
+#prev{padding:18px;display:grid;grid-template-columns:repeat(8,1fr);gap:14px;align-content:start}
+#prev canvas{width:100%;height:auto;display:block;background:#0003;border:1px solid var(--line)}
+h1{font-size:22px;margin:0 0 12px;letter-spacing:.02em}
+fieldset{border:1px solid var(--line);margin:0 0 14px;padding:10px 12px 12px}
+legend{padding:0 6px;color:var(--acc);font-weight:bold}
+label{display:block;margin:8px 0 2px;color:var(--mute);font-size:13px}
+input[type=text],input[type=number],textarea,select{width:100%;padding:7px 8px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;font:inherit}
+textarea{min-height:64px;resize:vertical}
+input[type=range]{width:100%}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.art{margin-top:6px;padding:6px 8px;border:1px dashed var(--line)}
+.art small{color:var(--mute)}
+button{width:100%;margin-top:8px;padding:11px;background:var(--acc2);color:#fff;border:0;border-radius:3px;font:bold 15px Georgia,serif;cursor:pointer}
+button:hover{background:var(--acc)}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+details{margin-bottom:12px;border:1px solid var(--line);padding:6px 10px}
+summary{cursor:pointer;color:var(--acc);font-weight:bold}
+#msg{color:var(--mute);font-size:13px;margin-top:8px;min-height:18px}
+@media (max-width:900px){.app{grid-template-columns:1fr}#form{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="form"><h1>Dice Arena — генератор персонажей</h1></aside>
+  <main id="prev"></main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script>
+/* ================= НАСТРОЙКИ ================= */
+// Пути к фоновым шаблонам (положите PNG рядом с этим файлом или измените пути)
+const BACKGROUND_HERO_PATH = 'https://media.discordapp.net/attachments/1560334327970144306/1560334433003897006/Dice_Arena_Duel_20261015183855.png?ex=6ad2562e&is=6ad104ae&hm=ac73f2cd78c2963d6c379939f5dd1acbbce9a192d75226961ed9006b583a9cca&=&format=webp&quality=lossless&width=1280&height=979';
+
+const BACKGROUND_CARD_URLS = {
+  0: 'https://media.discordapp.net/attachments/1560334327970144306/1560334408307839086/20261015161057.png?ex=6ad25628&is=6ad104a8&hm=2ad72a6f95c6449fcc6d14f29f09a1358aa98b020ea459290a136a6d4f53f83b&=&format=webp&quality=lossless&width=669&height=1024',
+  2: 'https://media.discordapp.net/attachments/1560334327970144306/1560334409008156828/20261015161101.png?ex=6ad25628&is=6ad104a8&hm=87878f6fc1866fbb7f43058014cd4eae71809001ba2de0d2e105c92fc2b59373&=&format=webp&quality=lossless&width=669&height=1024',
+  3: 'https://media.discordapp.net/attachments/1560334327970144306/1560334409591300296/20261015161106.png?ex=6ad25628&is=6ad104a8&hm=a543b1e94c9bd708b875d9e9fc702b3c742b1533a269e5b308c6d98400de9f66&=&format=webp&quality=lossless&width=669&height=1024',
+  4: 'https://media.discordapp.net/attachments/1560334327970144306/1560334410207858869/20261015161109.png?ex=6ad25629&is=6ad104a9&hm=b48a28046da830a18934da7b4d11bc9efe955a60bdf09e19f23756ca7eb66323&=&format=webp&quality=lossless&width=669&height=1024',
+  5: 'https://media.discordapp.net/attachments/1560334327970144306/1560334410920763492/20261015161113.png?ex=6ad4f929&is=6ad3a7a9&hm=cac18df22b907330308ec01a4ac883524f57ef0a8ef0043b14df32c8047ae7f6&=&format=webp&quality=lossless&width=669&height=1024',
+  6: 'https://media.discordapp.net/attachments/1560334327970144306/1560334411566944326/20261015161117.png?ex=6ad25629&is=6ad104a9&hm=c4404c4a7fadf233f51a54bc49b0ff9d016cda8b3c1be8c669821048dab2bb97&=&format=webp&quality=lossless&width=669&height=1024'
+};
+const BACKGROUND_CARD_PATH = n => BACKGROUND_CARD_URLS[n];
+
+const CARD_W = 1220, CARD_H = 1866, HERO_W = 2440;
+
+// Цвета текста (любой CSS-цвет: '#000', 'white', 'rgb(...)')
+const COLORS = {
+  heroName:    '#000000',
+  heroTitle:   '#ffffff',   // титул — белый
+  heroPassive: '#000000',
+  heroMemo:    '#000000',
+  heroHp:      '#000000',   // ХП — чёрный
+  cardName:    '#000000',
+  cardEffect:  '#000000',
+  heroMemoTitle: '#000000',
+  heroLore: '#000000'
+};
+
+// Координаты — от центра шаблона (X вправо, Y вниз)
+const HERO_POS = {
+  art: [-580, -130], name: [-590, -720], title: [-600, -590],
+  passive: [-580, 710],   // ← указано в ТЗ так же, как имя; при наложении поменяйте здесь
+  memo: [600, -770],       // центр первой строки памятки, остальные ниже
+  hp: [-870, 330]
+};
+const HERO_ART_SIZE = [1000, 1000];  // «окно» арта героя (cover-вписывание)
+const CARD_POS = { name: [0, -760], art: [0, -360], effect: [0, 20] };
+const CARD_ART_SIZE = [1000, 640];
+const STAT_R = 105;
+const STAT_POS = {
+  2: [[-145,690],[145,690]],
+  3: [[-290,690],[0,690],[290,690]],
+  4: [[-145,690],[145,690],[-145,400],[145,400]],
+  5: [[-145,690],[145,690],[-290,400],[0,400],[290,400]],
+  6: [[-290,690],[0,690],[290,690],[-290,400],[0,400],[290,400]]
+};
+const STATS = [null,
+  {n:'Сила',c:'#c0392b'},{n:'Ловкость',c:'#2e9e5b'},{n:'Выносливость',c:'#d9822b'},
+  {n:'Интеллект',c:'#2f7fc1'},{n:'Концентрация',c:'#8a4fc0'},{n:'Бдительность',c:'#d4b92a'}];
+const FONT = '"PT Serif", Georgia, serif';
+
+// Начертание для каждого текста: weight — '400' (обычный) или '700' (жирный),
+// style — 'normal' или 'italic' (курсив)
+const TEXT_STYLES = {
+  heroName:    {weight:'700', style:'normal'},
+  heroTitle:   {weight:'400', style:'italic'},
+  heroPassive: {weight:'400', style:'normal'},
+  heroMemo:    {weight:'400', style:'normal'},
+  heroHp:      {weight:'700', style:'normal'},
+  cardName:    {weight:'700', style:'normal'},
+  cardEffect:  {weight:'400', style:'normal'},
+  heroMemoTitle: {weight:'700', style:'normal'},
+  heroLore: {weight:'400', style:'italic'}
+};
+
+// Памятка: x — левый край текста (от центра шаблона), w — ширина строки,
+// h — максимальная высота при авто-размере (чем больше, тем меньше сжимается текст)
+const MEMO_BOX = {x: 100, w: 980, h: 1500};
+const MEMO_TITLE_SCALE = 1.2;  // название блока крупнее текста в 1.2 раза
+const MEMO_GAP = 0.8;          // отступ между блоками (в высотах строки)
+// Лор: x, y — центр блока (от центра шаблона), w — ширина строки, h — максимальная высота при авто-размере
+const LORE_BOX = {x: 625, y: 800, w: 850, h: 250};
+const LORE_ALPHA = 0.66;   // прозрачность (0.66 = 66% непрозрачности)
+
+
+// Иконки характеристик: PNG с прозрачным фоном (можно ссылки или пути вида 'templates/stat_1.png')
+const STAT_ICON_URLS = {
+  1: 'https://media.discordapp.net/attachments/1560334327970144306/1560354903346651166/306_20261015201228.png?ex=6ad2693e&is=6ad117be&hm=796f59fedba19e84847270c15641eccaedfb7000a34c9643403725104cf9db37&=&format=webp&quality=lossless',  // Сила
+  2: 'https://media.discordapp.net/attachments/1560334327970144306/1560354903652696095/306_20261015201238.png?ex=6ad2693f&is=6ad117bf&hm=9c6508dd8c3e02bd69fb4a03b013211b987a7d297daf7bb117a026a264807b40&=&format=webp&quality=lossless',  // Ловкость
+  3: 'https://media.discordapp.net/attachments/1560334327970144306/1560354903963082752/306_20261015201246.png?ex=6ad2693f&is=6ad117bf&hm=a72a9740a42213c131995f62ae9f07e8a769be03dba6d50baab245d1bcad9450&=&format=webp&quality=lossless',  // Выносливость
+  4: 'https://media.discordapp.net/attachments/1560334327970144306/1560354904281718844/306_20261015201254.png?ex=6ad2693f&is=6ad117bf&hm=2579e47115b50cd0eaa38283a6cb2b4dedc1c95b9794935a0656e7636b87221e&=&format=webp&quality=lossless',  // Интеллект
+  5: 'https://media.discordapp.net/attachments/1560334327970144306/1560354904537825300/306_20261015201302.png?ex=6ad2693f&is=6ad117bf&hm=5d0d3200596b0f5fb292443f8d9733ef6add6f9ba2e90efe327e0369bcc8d85d&=&format=webp&quality=lossless',  // Концентрация
+  6: 'https://media.discordapp.net/attachments/1560334327970144306/1560354904814391408/306_20261015201308.png?ex=6ad2693f&is=6ad117bf&hm=1743ab1b94bdb6803a2366ba0f6679439ea3b09f72a7e5282616822a3af53e42&=&format=webp&quality=lossless'   // Бдительность
+};
+const STAT_ICON_SIZE = 230;  // размер области под иконку (px); картинка вписывается с сохранением пропорций
+
+/* ================= СОСТОЯНИЕ ================= */
+const newArt = () => ({img:null, scale:1, dx:0, dy:0});
+const S = {
+  hero: {name:'', title:'', hp:'', passive:'', memo:[{title:'', text:''}], lore:'', art:newArt(),
+         fs:{name:0, title:0, hp:0, passive:0, memo:0, lore:0}},
+  ab: Array.from({length:5}, () => ({name:'', count:0, stats:[], effect:'', art:newArt(),
+         fs:{name:0, effect:0}}))
+};
+
+/* ================= ЗАГРУЗКА ШАБЛОНОВ ================= */
+const tplCache = {};
+function loadTpl(path){
+  if(!tplCache[path]) tplCache[path] = new Promise(res => {
+    const i = new Image();
+    i.crossOrigin = 'anonymous';   // обязательно для скачивания результата
+    i.onload = () => res(i);
+    i.onerror = () => res(null);
+    i.src = path;
+  });
+  return tplCache[path];
+}
+
+/* ================= ОТРИСОВКА ТЕКСТА ================= */
+function wrapLines(ctx, text, maxW){
+  const out = [];
+  for(const para of String(text).split('\n')){
+    let line = '';
+    for(const w of para.split(/\s+/).filter(Boolean)){
+      const t = line ? line + ' ' + w : w;
+      if(ctx.measureText(t).width <= maxW || !line) line = t; else { out.push(line); line = w; }
+    }
+    out.push(line);
+  }
+  return out;
+}
+// mode 'first': центр первой строки в cy; 'center': блок центрируется по cy. Шрифт сжимается, пока текст не влезет.
+function drawBlock(ctx, text, cx, cy, maxW, maxH, size, o = {}){
+  if(!text) return;
+  let lines, lh;
+  const setFont = s => { ctx.font = `${o.style || ''} ${o.weight || ''} ${s}px ${FONT}`; };
+  if(o.fs > 0){
+    size = o.fs; setFont(size);
+    lines = wrapLines(ctx, text, maxW); lh = size * 1.25;
+  } else {
+    for(; size >= 24; size -= 2){
+      setFont(size);
+      lines = wrapLines(ctx, text, maxW); lh = size * 1.25;
+      if(lines.length * lh <= maxH) break;
+    }
+  }
+  ctx.save();
+  if(o.alpha !== undefined) ctx.globalAlpha = o.alpha;
+  ctx.fillStyle = o.color || '#2a2118'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const y0 = o.mode === 'center' ? cy - (lines.length - 1) * lh / 2
+           : o.mode === 'last'   ? cy - (lines.length - 1) * lh   // cy = центр нижней строки
+           : cy;                                                  // 'first': cy = центр первой строки
+  lines.forEach((l, i) => ctx.fillText(l, cx, y0 + i * lh));
+  ctx.restore();
+}
+// Рисует памятку блоками: название (bold, крупнее) + текст, выравнивание по левому краю.
+// Первая строка центрируется по y. Если o.fs > 0, размер задан вручную.
+function drawMemo(ctx, blocks, x, y, maxW, maxH, size, o = {}){
+  const items = blocks.filter(b => b.title.trim() || b.text.trim());
+  if(!items.length) return;
+  const fnt = (st, s) => `${st.style} ${st.weight} ${s}px ${FONT}`;
+  const layout = s => {
+    const lines = []; let h = 0;
+    items.forEach((b, i) => {
+      if(i) h += s * MEMO_GAP;
+      const parts = [[b.title, TEXT_STYLES.heroMemoTitle, s * MEMO_TITLE_SCALE, o.titleColor],
+                     [b.text,  TEXT_STYLES.heroMemo,      s,                    o.color]];
+      parts.forEach(([txt, st, fs, col]) => {
+        if(!txt.trim()) return;
+        ctx.font = fnt(st, fs);
+        const lh = fs * 1.25;
+        wrapLines(ctx, txt, maxW).forEach(l => {
+          lines.push({l, font: ctx.font, color: col, top: h, lh}); h += lh;
+        });
+      });
+    });
+    return {lines, h};
+  };
+  let L;
+  if(o.fs > 0) L = layout(o.fs);
+  else for(let s = size; s >= 24; s -= 2){ L = layout(s); if(L.h <= maxH) break; }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const first = L.lines[0].lh;
+  L.lines.forEach(r => {
+    ctx.font = r.font; ctx.fillStyle = r.color || '#2a2118';
+    ctx.fillText(r.l, x, y - first/2 + r.top + r.lh/2);
+  });
+}
+// img — загруженная картинка иконки (или null → рисуем цветной кружок)
+function drawStat(ctx, id, x, y, img){
+  if(img){
+    const k = Math.min(STAT_ICON_SIZE / img.width, STAT_ICON_SIZE / img.height);
+    const w = img.width * k, h = img.height * k;
+    ctx.drawImage(img, x - w/2, y - h/2, w, h);
+    return;
+  }
+  const s = STATS[id];                       // запасной вариант: кружок с цифрой
+  ctx.beginPath(); ctx.arc(x, y, STAT_R, 0, 7);
+  ctx.fillStyle = s.c; ctx.fill();
+  ctx.lineWidth = 8; ctx.strokeStyle = '#fff8'; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `bold 120px ${FONT}`; ctx.shadowColor = '#0008'; ctx.shadowBlur = 8;
+  ctx.fillText(id, x, y + 6); ctx.shadowBlur = 0;
+}
+function drawArt(ctx, a, cx, cy, size, clip = false){
+  if(!a.img) return;
+  const k = Math.max(size[0] / a.img.width, size[1] / a.img.height) * a.scale;
+  const w = a.img.width * k, h = a.img.height * k;
+  ctx.save();
+  if(clip){                       // обрезаем всё, что вышло за рамку арта
+    ctx.beginPath();
+    ctx.rect(cx - size[0]/2, cy - size[1]/2, size[0], size[1]);
+    ctx.clip();
+  }
+  ctx.drawImage(a.img, cx + a.dx - w/2, cy + a.dy - h/2, w, h);
+  ctx.restore();
+}
+function placeholder(ctx, W, H){
+  ctx.fillStyle = '#e8dcc0'; ctx.fillRect(0, 0, W, H);
+  ctx.lineWidth = 20; ctx.strokeStyle = '#8a6a2a'; ctx.strokeRect(10, 10, W - 20, H - 20);
+}
+
+/* ================= РЕНДЕР КАРТ ================= */
+async function renderCard(canvas, a){
+  const ctx = canvas.getContext('2d'), W = CARD_W, H = CARD_H, cx = W/2, cy = H/2;
+  const tpl = await loadTpl(BACKGROUND_CARD_PATH(a.count));
+  const icons = await Promise.all([1,2,3,4,5,6].map(id => loadTpl(STAT_ICON_URLS[id])));
+  ctx.clearRect(0, 0, W, H);
+  if(tpl) ctx.drawImage(tpl, 0, 0, W, H); else placeholder(ctx, W, H);
+  drawArt(ctx, a.art, cx + CARD_POS.art[0], cy + CARD_POS.art[1], CARD_ART_SIZE, true);
+  drawBlock(ctx, a.name, cx + CARD_POS.name[0], cy + CARD_POS.name[1], 1000, 130, 96,
+    {...TEXT_STYLES.cardName, mode:'center', color: COLORS.cardName, fs: a.fs.name});
+  const maxH = a.count > 3 ? 470 : 700;
+  drawBlock(ctx, a.effect, cx + CARD_POS.effect[0], cy + CARD_POS.effect[1], 1000, maxH, 52,
+    {...TEXT_STYLES.cardEffect, mode:'first', color: COLORS.cardEffect, fs: a.fs.effect});
+  (STAT_POS[a.count] || []).forEach((p, i) => {
+    const id = a.stats[i] || 1;
+    drawStat(ctx, id, cx + p[0], cy + p[1], icons[id - 1]);
+  });
+}
+
+async function renderHero(canvas, h){
+  const ctx = canvas.getContext('2d'), W = HERO_W, H = CARD_H, cx = W/2, cy = H/2, P = HERO_POS;
+  const tpl = await loadTpl(BACKGROUND_HERO_PATH);
+  ctx.clearRect(0, 0, W, H);
+  drawArt(ctx, h.art, cx + P.art[0], cy + P.art[1], HERO_ART_SIZE);
+  if(tpl) ctx.drawImage(tpl, 0, 0, W, H); else placeholder(ctx, W, H);
+  drawBlock(ctx, h.name, cx + P.name[0], cy + P.name[1], 1000, 140, 120,
+    {...TEXT_STYLES.heroName, mode:'center', color: COLORS.heroName, fs: h.fs.name});
+  drawBlock(ctx, h.title, cx + P.title[0], cy + P.title[1], 1000, 90, 64,
+    {...TEXT_STYLES.heroTitle, mode:'center', color: COLORS.heroTitle, fs: h.fs.title});
+  drawBlock(ctx, h.passive, cx + P.passive[0], cy + P.passive[1], 800, 500, 50,
+    {...TEXT_STYLES.heroPassive, mode:'center', color: COLORS.heroPassive, fs: h.fs.passive});
+  drawMemo(ctx, h.memo, cx + MEMO_BOX.x, cy + P.memo[1], MEMO_BOX.w, MEMO_BOX.h, 46,
+    {color: COLORS.heroMemo, titleColor: COLORS.heroMemoTitle, fs: h.fs.memo});
+  drawBlock(ctx, h.lore, cx + LORE_BOX.x, cy + LORE_BOX.y, LORE_BOX.w, LORE_BOX.h, 44,
+    {...TEXT_STYLES.heroLore, mode:'last', color: COLORS.heroLore, alpha: LORE_ALPHA, fs: h.fs.lore});
+  drawBlock(ctx, h.hp === '' ? '' : String(h.hp), cx + P.hp[0], cy + P.hp[1], 300, 200, 160,
+    {...TEXT_STYLES.heroHp, mode:'center', color: COLORS.heroHp, fs: h.fs.hp});
+}
+
+/* ================= ПРЕДПРОСМОТР ================= */
+const cv = {};
+const prev = document.getElementById('prev');
+function mkCanvas(key, w, h, col){
+  const c = document.createElement('canvas'); c.width = w; c.height = h; c.style.gridColumn = col;
+  prev.appendChild(c); cv[key] = c;
+}
+mkCanvas('a0', CARD_W, CARD_H, '1 / 3');
+mkCanvas('hero', HERO_W, CARD_H, '3 / 7');
+mkCanvas('a1', CARD_W, CARD_H, '7 / 9');
+mkCanvas('a2', CARD_W, CARD_H, '2 / 4');
+mkCanvas('a3', CARD_W, CARD_H, '4 / 6');
+mkCanvas('a4', CARD_W, CARD_H, '6 / 8');
+
+const dirty = new Set(); let raf = 0;
+function touch(key){ dirty.add(key); if(!raf) raf = requestAnimationFrame(flush); }
+async function flush(){
+  raf = 0; const keys = [...dirty]; dirty.clear();
+  for(const k of keys) await (k === 'hero' ? renderHero(cv.hero, S.hero) : renderCard(cv[k], S.ab[+k[1]]));
+}
+const renderAll = async () => { dirty.clear(); await renderHero(cv.hero, S.hero); for(let i = 0; i < 5; i++) await renderCard(cv['a' + i], S.ab[i]); };
+
+/* ================= ФОРМА ================= */
+const form = document.getElementById('form');
+let msg;   // строка статуса под кнопками (создаётся в buildForm)
+
+function el(tag, props = {}, parent){ const e = Object.assign(document.createElement(tag), props); parent && parent.appendChild(e); return e; }
+function field(parent, label, input){ el('label', {textContent: label}, parent); parent.appendChild(input); return input; }
+function textIn(obj, key, key2, type = 'text'){
+  const i = el(type === 'area' ? 'textarea' : 'input');
+  if(type !== 'area') i.type = type; if(type === 'number') i.min = 0;
+  i.value = obj[key] ?? '';                       // значение из состояния (нужно при загрузке проекта)
+  i.oninput = () => { obj[key] = i.value; touch(key2); }; return i;
+}
+function artControl(parent, art, key){
+  const box = el('div', {className:'art'}, parent);
+  const f = el('input', {type:'file', accept:'image/png,image/jpeg'}, box);
+  const st = el('small', {textContent: art.img ? 'Арт загружен' : ''}, box); st.style.display = 'block';
+  f.onchange = () => {
+    const file = f.files[0]; if(!file) return;
+    const rd = new FileReader();                  // читаем как data-URL, чтобы арт можно было сохранить в проект
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => { art.img = img; art.src = rd.result; st.textContent = 'Арт загружен: ' + file.name; touch(key); };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(file);
+  };
+  [['scale','Масштаб',0.2,3,0.01],['dx','Сдвиг по X',-1000,1000,5],['dy','Сдвиг по Y',-1000,1000,5]].forEach(([k, t, mn, mx, stp]) => {
+    el('small', {textContent: t}, box);
+    const r = el('input', {type:'range', min:mn, max:mx, step:stp, value:art[k]}, box);
+    r.oninput = () => { art[k] = +r.value; touch(key); };
+  });
+}
+function fsCtl(parent, fs, k, key){
+  const t = el('small', {textContent:'Размер шрифта: ' + (fs[k] || 'авто')}, parent);
+  t.style.display = 'block'; t.style.marginTop = '4px';
+  const r = el('input', {type:'range', min:0, max:400, step:2, value:fs[k] || 0}, parent);
+  r.oninput = () => { fs[k] = +r.value; t.textContent = 'Размер шрифта: ' + (fs[k] || 'авто'); touch(key); };
+}
+
+/* ---------- Сохранение / загрузка проекта ---------- */
+const serArt = a => ({src: a.src || null, scale: a.scale, dx: a.dx, dy: a.dy});
+function projectData(){
+  const h = S.hero;
+  return {
+    app: 'dice-arena', version: 1,
+    hero: {name:h.name, title:h.title, hp:h.hp, passive:h.passive, memo:h.memo, lore:h.lore, fs:h.fs, art:serArt(h.art)},
+    abilities: S.ab.map(a => ({name:a.name, count:a.count, stats:a.stats, effect:a.effect, fs:a.fs, art:serArt(a.art)}))
+  };
+}
+const loadImg = src => new Promise(res => {
+  if(!src) return res(null);
+  const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src;
+});
+async function setArt(art, d){
+  d = d || {};
+  art.src = d.src || null; art.img = await loadImg(d.src);
+  art.scale = d.scale ?? 1; art.dx = d.dx ?? 0; art.dy = d.dy ?? 0;
+}
+async function applyProject(d){
+  if(!d || d.app !== 'dice-arena') throw new Error('Это не файл проекта Dice Arena');
+  const h = d.hero || {}, H = S.hero;
+  Object.assign(H, {
+    name: h.name || '', title: h.title || '', hp: h.hp ?? '', passive: h.passive || '', lore: h.lore || '',
+    memo: Array.isArray(h.memo) && h.memo.length ? h.memo.map(b => ({title: b.title || '', text: b.text || ''})) : [{title:'', text:''}]
+  });
+  Object.keys(H.fs).forEach(k => H.fs[k] = 0); Object.assign(H.fs, h.fs || {});
+  await setArt(H.art, h.art);
+  for(let i = 0; i < 5; i++){
+    const s = (d.abilities || [])[i] || {}, a = S.ab[i];
+    Object.assign(a, {name: s.name || '', count: [0,2,3,4,5,6].includes(s.count) ? s.count : 0,
+                      stats: (s.stats || []).map(Number), effect: s.effect || ''});
+    Object.keys(a.fs).forEach(k => a.fs[k] = 0); Object.assign(a.fs, s.fs || {});
+    await setArt(a.art, s.art);
+  }
+  buildForm(); await renderAll();
+}
+
+/* ---------- Экспорт ---------- */
+const toBlob = c => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('toBlob')), 'image/png'));
+const safe = s => (s || '').trim().replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 30);
+function fail(e){
+  console.error(e);
+  msg.textContent = 'Не удалось сохранить: браузер блокирует холст с шаблонами. Проверьте ссылки (CORS) или откройте страницу через локальный сервер.';
+}
+
+/* ---------- Построение формы (вызывается при старте и после загрузки проекта) ---------- */
+function buildForm(){
+  while(form.children.length > 1) form.lastChild.remove();   // оставляем только заголовок h1
+
+  // Блок А — персонаж
+  const fa = el('fieldset', {}, form); el('legend', {textContent:'Персонаж'}, fa);
+  field(fa, 'Имя персонажа', textIn(S.hero, 'name', 'hero'));
+  fsCtl(fa, S.hero.fs, 'name', 'hero');
+  field(fa, 'Титул / эпитет', textIn(S.hero, 'title', 'hero'));
+  fsCtl(fa, S.hero.fs, 'title', 'hero');
+  field(fa, 'Здоровье (ХП)', textIn(S.hero, 'hp', 'hero', 'number'));
+  fsCtl(fa, S.hero.fs, 'hp', 'hero');
+  el('label', {textContent:'Арт персонажа (.png / .jpg)'}, fa); artControl(fa, S.hero.art, 'hero');
+  field(fa, 'Текст пассивки', textIn(S.hero, 'passive', 'hero', 'area'));
+  fsCtl(fa, S.hero.fs, 'passive', 'hero');
+
+  el('label', {textContent:'Памятка (блоки)'}, fa);
+  const memoBox = el('div', {}, fa);
+  const buildMemoForm = () => {
+    memoBox.innerHTML = '';
+    S.hero.memo.forEach((b, i) => {
+      const w = el('div', {className:'art'}, memoBox);
+      const t = el('input', {type:'text', placeholder:'Название блока', value:b.title}, w);
+      t.oninput = () => { b.title = t.value; touch('hero'); };
+      const x = el('textarea', {placeholder:'Текст блока', value:b.text}, w);
+      x.style.marginTop = '6px';
+      x.oninput = () => { b.text = x.value; touch('hero'); };
+      const del = el('button', {type:'button', textContent:'Удалить блок'}, w);
+      del.onclick = () => { S.hero.memo.splice(i, 1); buildMemoForm(); touch('hero'); };
+    });
+  };
+  el('button', {type:'button', textContent:'+ Добавить блок памятки', onclick: () => {
+    S.hero.memo.push({title:'', text:''}); buildMemoForm(); touch('hero');
+  }}, fa);
+  buildMemoForm();
+  fsCtl(fa, S.hero.fs, 'memo', 'hero');
+  field(fa, 'Лор (внизу, курсивом)', textIn(S.hero, 'lore', 'hero', 'area'));
+  fsCtl(fa, S.hero.fs, 'lore', 'hero');
+
+  // Блок Б — способности
+  S.ab.forEach((a, n) => {
+    const key = 'a' + n, d = el('details', {}, form); if(n === 0) d.open = true;
+    el('summary', {textContent:`Способность ${n + 1}`}, d);
+    field(d, 'Название', textIn(a, 'name', key));
+    fsCtl(d, a.fs, 'name', key);
+    const cnt = el('select'); [0,2,3,4,5,6].forEach(v => el('option', {value:v, textContent:v + ' характеристик'}, cnt));
+    cnt.value = a.count;
+    field(d, 'Количество ячеек характеристик', cnt);
+    const stBox = el('div', {className:'row'}, d); stBox.style.flexWrap = 'wrap';
+    const buildStats = () => {
+      stBox.innerHTML = '';
+      for(let i = 0; i < a.count; i++){
+        if(!a.stats[i]) a.stats[i] = 1;
+        const s = el('select', {}, stBox); s.style.flex = '1 1 28%'; s.style.marginTop = '6px';
+        for(let id = 1; id <= 6; id++) el('option', {value:id, textContent:`${id} (${STATS[id].n})`}, s);
+        s.value = a.stats[i]; s.onchange = () => { a.stats[i] = +s.value; touch(key); };
+      }
+    };
+    cnt.onchange = () => { a.count = +cnt.value; buildStats(); touch(key); };
+    buildStats();
+    field(d, 'Описание / эффект', textIn(a, 'effect', key, 'area'));
+    fsCtl(d, a.fs, 'effect', key);
+    el('label', {textContent:'Арт способности (необязательно)'}, d); artControl(d, a.art, key);
+  });
+
+  // Блок Проект — сохранить / загрузить
+  const fp = el('fieldset', {}, form); el('legend', {textContent:'Проект'}, fp);
+  el('button', {type:'button', textContent:'💾 Сохранить проект (файл для редактирования)', onclick: () => {
+    const blob = new Blob([JSON.stringify(projectData())], {type:'application/json'});
+    saveAs(blob, `${safe(S.hero.name) || 'hero'}_project.json`);
+    msg.textContent = 'Проект сохранён. Загрузите этот файл, чтобы продолжить редактирование.';
+  }}, fp);
+  const pf = el('input', {type:'file', accept:'.json,application/json'}); pf.hidden = true;
+  pf.onchange = async () => {
+    const file = pf.files[0]; if(!file) return;
+    try{
+      await applyProject(JSON.parse(await file.text()));
+      msg.textContent = 'Проект загружен: ' + file.name;
+    }catch(e){ console.error(e); msg.textContent = 'Не удалось загрузить: ' + e.message; }
+  };
+  el('button', {type:'button', textContent:'📂 Загрузить проект', onclick: () => pf.click()}, fp);
+  fp.appendChild(pf);
+
+  // Блок В — экспорт картинок
+  const fx = el('fieldset', {}, form); el('legend', {textContent:'Экспорт'}, fx);
+  msg = el('div', {id:'msg'});
+  el('button', {textContent:'📥 Скачать отдельные карточки (ZIP)', onclick: async () => {
+    try{
+      msg.textContent = 'Готовлю архив…'; await renderAll();
+      const zip = new JSZip(), hn = safe(S.hero.name) || 'hero';
+      zip.file(`${hn}_planshet.png`, await toBlob(cv.hero));
+      for(let i = 0; i < 5; i++) zip.file(`${hn}_ability_${i + 1}${safe(S.ab[i].name) ? '_' + safe(S.ab[i].name) : ''}.png`, await toBlob(cv['a' + i]));
+      saveAs(await zip.generateAsync({type:'blob'}), `${hn}_cards.zip`); msg.textContent = 'Готово.';
+    }catch(e){ fail(e); }
+  }}, fx);
+  el('button', {textContent:'🎲 Скачать плакат для Tabletop Simulator (1 PNG)', onclick: async () => {
+    try{
+      msg.textContent = 'Склеиваю плакат…'; await renderAll();
+      const p = document.createElement('canvas'); p.width = CARD_W * 4; p.height = CARD_H * 2;
+      const g = p.getContext('2d');
+      g.drawImage(cv.a0, 0, 0);
+      g.drawImage(cv.hero, CARD_W, 0);
+      g.drawImage(cv.a1, CARD_W * 3, 0);
+      [2, 3, 4].forEach((n, i) => g.drawImage(cv['a' + n], CARD_W / 2 + CARD_W * i, CARD_H));
+      saveAs(await toBlob(p), `${safe(S.hero.name) || 'hero'}_TTS.png`); msg.textContent = 'Готово.';
+    }catch(e){ fail(e); }
+  }}, fx);
+  fx.appendChild(msg);
+}
+
+buildForm();
+loadFonts().then(renderAll);
+</script>
+</body>
+</html>
